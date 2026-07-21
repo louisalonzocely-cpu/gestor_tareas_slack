@@ -190,6 +190,7 @@ app.action('toggle_tarea', async ({ ack, body, client }) => {
 });
 
 (async () => {
-  await app.start(process.env.PORT || 3000);
-  console.log('⚡️ App corriendo');
+  const port = process.env.PORT || 3000;
+  await app.start(port);
+  console.log(`⚡️ App corriendo en el puerto ${port}`);
 })();
