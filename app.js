@@ -6,6 +6,11 @@ const receiver = new ExpressReceiver({
   signingSecret: process.env.SLACK_SIGNING_SECRET,
 });
 
+receiver.router.use((req, res, next) => {
+  console.log('📥 Petición recibida:', req.method, req.path);
+  next();
+});
+
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
   receiver,
