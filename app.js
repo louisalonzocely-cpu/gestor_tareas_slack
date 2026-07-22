@@ -83,21 +83,13 @@ async function construirVistaHome(userId) {
         ],
       },
       { type: 'divider' },
-      {
-        type: 'context',
-        elements: [
-          {
-            type: 'mrkdwn',
-            text: '\u00A0',
-          },
-        ],
-      },
     ];
 
     // --- SECCIÓN: TAREAS PENDIENTES ---
+    // Usamos el tipo 'header' para forzar el margen y espaciado nativo de Slack
     blocksBase.push({
-      type: 'section',
-      text: { type: 'mrkdwn', text: `\n\n\n*📌 Pendientes (${pendientes.length})*` },
+      type: 'header',
+      text: { type: 'plain_text', text: `📌 Pendientes (${pendientes.length})`, emoji: true },
     });
 
     if (pendientes.length === 0) {
@@ -132,8 +124,8 @@ async function construirVistaHome(userId) {
     // --- SECCIÓN: TAREAS COMPLETADAS ---
     if (completadas.length > 0) {
       blocksBase.push({
-        type: 'section',
-        text: { type: 'mrkdwn', text: `*✅ Completadas (${completadas.length})*` },
+        type: 'header',
+        text: { type: 'plain_text', text: `✅ Completadas (${completadas.length})`, emoji: true },
       });
 
       completadas.forEach((tarea) => {
@@ -179,7 +171,7 @@ app.event('app_home_opened', async ({ event, client }) => {
   }
 });
 
-// Acción: Botón "➕ Nueva Tarea" abre el modal
+// Acción: Botón "Nueva Tarea" abre el modal
 app.action('abrir_modal_tarea', async ({ ack, body, client }) => {
   await ack();
   try {
@@ -251,7 +243,7 @@ app.view('submit_tarea', async ({ ack, body, view, client }) => {
   }
 });
 
-// Acción: Botón "✔ Completar" cambia el estado en la BD
+// Acción: Botón "Completar" cambia el estado en la BD
 app.action('completar_tarea', async ({ ack, body, client }) => {
   await ack();
   const usuario = body.user.id;
