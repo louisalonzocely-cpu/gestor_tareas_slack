@@ -11,7 +11,15 @@ if (process.env.NODE_ENV !== 'production') {
 const { App, ExpressReceiver } = require('@slack/bolt');
 
 // Funciones para interactuar con la base de datos PostgreSQL
-const { obtenerTareas, crearTarea, actualizarCompletada, obtenerTareasCompletadas, contarTareasCompletadas } = require('./db');
+const { 
+  obtenerTareas, 
+  crearTarea, 
+  actualizarCompletada, 
+  obtenerTareasCompletadas, 
+  contarTareasCompletadas,
+  obtenerTareaPorId,
+  actualizarTarea
+} = require('./db');
 
 
 // ==========================================
@@ -120,6 +128,7 @@ async function construirVistaHome(userId, paginaCompletadas = 1) {
         
         const descTexto = tarea.descripcion ? `\n>_${tarea.descripcion}_` : '';
 
+        // Sección con título y descripción
         blocksBase.push({
           type: 'section',
           block_id: `tarea_${tarea.id}`,
@@ -127,12 +136,25 @@ async function construirVistaHome(userId, paginaCompletadas = 1) {
             type: 'mrkdwn',
             text: `*${tarea.titulo}*${descTexto}\n${fechaTexto}`,
           },
-          accessory: {
-            type: 'button',
-            text: { type: 'plain_text', text: '✔ Completar', emoji: true },
-            value: String(tarea.id),
-            action_id: 'completar_tarea',
-          },
+        });
+
+        // Botones de acción: Completar y Editar
+        blocksBase.push({
+          type: 'actions',
+          elements: [
+            {
+              type: 'button',
+              text: { type: 'plain_text', text: '✔ Completar', emoji: true },
+              value: String(tarea.id),
+              action_id: 'completar_tarea',
+            },
+            {
+              type: 'button',
+              text: { type: 'plain_text', text: '✏️ Editar', emoji: true },
+              value: String(tarea.id),
+              action_id: 'editar_tarea',
+            },
+          ],
         });
       });
     }
@@ -140,66 +162,39 @@ async function construirVistaHome(userId, paginaCompletadas = 1) {
     blocksBase.push({ type: 'divider' });
     blocksBase.push({ type: 'context', elements: [{ type: 'mrkdwn', text: ' ' }] });
 
-    // --- SECCIÓN: TAREAS COMPLETADAS (CON TABLA Y PAGINACIÓN) ---
+    // --- SECCIÓN: TAREAS COMPLETADAS (LISTA COMPACTA) ---
     blocksBase.push({
       type: 'section',
       text: { type: 'mrkdwn', text: `*✅ Completadas (${totalCompletadas})*` },
     });
 
     if (completadas.length === 0) {
-      // Mensaje cuando no hay tareas completadas
       blocksBase.push({
         type: 'section',
         text: { type: 'mrkdwn', text: '_Aún no has completado ninguna tarea._' },
       });
     } else {
-      // Encabezado de tabla
-      blocksBase.push({
-        type: 'context',
-        elements: [{ type: 'mrkdwn', text: '```📋 *TÍTULO*                  📅 *LÍMITE*        🕐 *CREADA*```' }],
-      });
-
-      // Renderizar cada tarea completada como fila de tabla
+      // Lista compacta: una línea por tarea
       completadas.forEach((tarea) => {
-        const titulo = tarea.titulo.length > 20 
-          ? tarea.titulo.substring(0, 18) + '..' 
-          : tarea.titulo;
-        
-        // Formatear fecha límite (solo fecha o fecha + hora)
-        let fechaLimite = 'Sin fecha';
+        let fechaLimite = '';
         if (tarea.fecha) {
           const fecha = new Date(tarea.fecha);
-          fechaLimite = fecha.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
-          // Si tiene hora (no es medianoche exacta), mostrarla
+          fechaLimite = ` - ${fecha.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}`;
           if (fecha.getHours() !== 0 || fecha.getMinutes() !== 0) {
             fechaLimite += ` ${fecha.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
           }
         }
 
-        // Formatear fecha de creación
-        const fechaCreacion = tarea.creada_en 
-          ? new Date(tarea.creada_en).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })
-          : '--/--';
-
-        // Fila de tabla con formato alineado
-        const tituloPad = titulo.padEnd(22);
-        const fechaPad = fechaLimite.padEnd(16);
-
         blocksBase.push({
-          type: 'context',
-          elements: [{ 
-            type: 'mrkdwn', 
-            text: `~*~${tituloPad} ${fechaPad} ${fechaCreacion}~*~`
-          }],
+          type: 'section',
+          text: { type: 'mrkdwn', text: `~*${tarea.titulo}*~${fechaLimite}` },
+          accessory: {
+            type: 'button',
+            text: { type: 'plain_text', text: '✏️', emoji: true },
+            value: String(tarea.id),
+            action_id: 'editar_tarea',
+          },
         });
-
-        // Mostrar descripción si existe
-        if (tarea.descripcion) {
-          blocksBase.push({
-            type: 'context',
-            elements: [{ type: 'mrkdwn', text: `    >_${tarea.descripcion}_` }],
-          });
-        }
       });
 
       // Controles de paginación (solo si hay más de una página)
@@ -383,6 +378,125 @@ app.action('completar_tarea', async ({ ack, body, client }) => {
     });
   } catch (error) {
     console.error('❌ Error al actualizar tarea:', error);
+  }
+});
+
+// Acción: Botón "Editar" abre modal con datos de la tarea
+app.action('editar_tarea', async ({ ack, body, client }) => {
+  await ack();
+  const tareaId = body.actions[0].value;
+
+  try {
+    // Obtener datos actuales de la tarea
+    const tarea = await obtenerTareaPorId(tareaId);
+    if (!tarea) return;
+
+    // Preparar fecha y hora para los selectores
+    let fechaInicial = undefined;
+    let horaInicial = undefined;
+    if (tarea.fecha) {
+      const fecha = new Date(tarea.fecha);
+      fechaInicial = fecha.toISOString().split('T')[0]; // YYYY-MM-DD
+      // Solo mostrar hora si no es medianoche
+      if (fecha.getHours() !== 0 || fecha.getMinutes() !== 0) {
+        horaInicial = `${String(fecha.getHours()).padStart(2, '0')}:${String(fecha.getMinutes()).padStart(2, '0')}`;
+      }
+    }
+
+    await client.views.open({
+      trigger_id: body.trigger_id,
+      view: {
+        type: 'modal',
+        callback_id: 'submit_edicion',
+        private_metadata: tareaId,
+        title: { type: 'plain_text', text: 'Editar Tarea' },
+        submit: { type: 'plain_text', text: 'Guardar' },
+        close: { type: 'plain_text', text: 'Cancelar' },
+        blocks: [
+          {
+            type: 'input',
+            block_id: 'titulo_block',
+            label: { type: 'plain_text', text: 'Título de la tarea' },
+            element: {
+              type: 'plain_text_input',
+              action_id: 'titulo_input',
+              initial_value: tarea.titulo,
+            },
+          },
+          {
+            type: 'input',
+            block_id: 'descripcion_block',
+            label: { type: 'plain_text', text: 'Descripción' },
+            optional: true,
+            element: {
+              type: 'plain_text_input',
+              action_id: 'descripcion_input',
+              multiline: true,
+              initial_value: tarea.descripcion || '',
+            },
+          },
+          {
+            type: 'input',
+            block_id: 'fecha_block',
+            label: { type: 'plain_text', text: 'Fecha límite' },
+            optional: true,
+            element: {
+              type: 'datepicker',
+              action_id: 'fecha_input',
+              placeholder: { type: 'plain_text', text: 'Selecciona una fecha' },
+              ...(fechaInicial && { initial_date: fechaInicial }),
+            },
+          },
+          {
+            type: 'input',
+            block_id: 'hora_block',
+            label: { type: 'plain_text', text: 'Hora límite' },
+            optional: true,
+            element: {
+              type: 'timepicker',
+              action_id: 'hora_input',
+              placeholder: { type: 'plain_text', text: 'Selecciona una hora' },
+              ...(horaInicial && { initial_time: horaInicial }),
+            },
+          },
+        ],
+      },
+    });
+  } catch (error) {
+    console.error('❌ Error al abrir edición:', error);
+  }
+});
+
+// Modal Submit: Guardar edición de tarea
+app.view('submit_edicion', async ({ ack, body, view, client }) => {
+  await ack();
+  const tareaId = view.private_metadata;
+  const valores = view.state.values;
+  const usuario = body.user.id;
+
+  // Combinar fecha y hora en un solo timestamp
+  const fechaSeleccionada = valores.fecha_block.fecha_input.selected_date;
+  const horaSeleccionada = valores.hora_block.hora_input.selected_time;
+  
+  let fechaCompleta = null;
+  if (fechaSeleccionada) {
+    const hora = horaSeleccionada || '00:00';
+    fechaCompleta = `${fechaSeleccionada}T${hora}:00`;
+  }
+
+  try {
+    await actualizarTarea(tareaId, {
+      titulo: valores.titulo_block.titulo_input.value,
+      descripcion: valores.descripcion_block.descripcion_input.value || null,
+      fecha: fechaCompleta,
+    });
+
+    await client.views.publish({
+      user_id: usuario,
+      view: await construirVistaHome(usuario),
+    });
+  } catch (error) {
+    console.error('❌ Error al guardar edición:', error);
   }
 });
 

@@ -44,4 +44,32 @@ async function contarTareasCompletadas(usuarioId) {
   return parseInt(rows[0].total, 10);
 }
 
-module.exports = { obtenerTareas, crearTarea, actualizarCompletada, obtenerTareasCompletadas, contarTareasCompletadas };
+// Obtiene una tarea por su ID
+async function obtenerTareaPorId(tareaId) {
+  const { rows } = await pool.query('SELECT * FROM tareas WHERE id = $1', [tareaId]);
+  return rows[0];
+}
+
+// Actualiza una tarea existente
+async function actualizarTarea(tareaId, { titulo, descripcion, fecha }) {
+  const { rows } = await pool.query(
+    `UPDATE tareas 
+     SET titulo = COALESCE($1, titulo), 
+         descripcion = COALESCE($2, descripcion), 
+         fecha = $3
+     WHERE id = $4 
+     RETURNING *`,
+    [titulo, descripcion, fecha, tareaId]
+  );
+  return rows[0];
+}
+
+module.exports = { 
+  obtenerTareas, 
+  crearTarea, 
+  actualizarCompletada, 
+  obtenerTareasCompletadas, 
+  contarTareasCompletadas,
+  obtenerTareaPorId,
+  actualizarTarea
+};
