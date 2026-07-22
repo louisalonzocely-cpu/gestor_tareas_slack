@@ -11,7 +11,7 @@ if (process.env.NODE_ENV !== 'production') {
 const { App, ExpressReceiver } = require('@slack/bolt');
 
 // Funciones para interactuar con la base de datos PostgreSQL
-const { obtenerTareas, crearTarea, actualizarCompletada } = require('./db');
+const { obtenerTareas, crearTarea, actualizarCompletada, obtenerTareasCompletadas, contarTareasCompletadas } = require('./db');
 
 
 // ==========================================
@@ -48,15 +48,23 @@ const app = new App({
  * Consulta las tareas en Postgres y genera la vista dinámica del menú Home Tab.
  * 
  * @param {string} userId - ID de usuario de Slack.
+ * @param {number} paginaCompletadas - Página actual de tareas completadas (default: 1).
  * @returns {object} Objeto de vista compatible con Slack Block Kit.
  */
-async function construirVistaHome(userId) {
-  try {
-    const tareas = await obtenerTareas(userId);
+async function construirVistaHome(userId, paginaCompletadas = 1) {
+  // Constantes para paginación
+  const TAREAS_POR_PAGINA = 5;
+  const offset = (paginaCompletadas - 1) * TAREAS_POR_PAGINA;
 
-    // Filtrar tareas por estado
+  try {
+    // Consultar tareas pendientes (todas) y completadas (paginadas)
+    const tareas = await obtenerTareas(userId);
     const pendientes = tareas ? tareas.filter((t) => !t.completada) : [];
-    const completadas = tareas ? tareas.filter((t) => t.completada) : [];
+    
+    // Obtener tareas completadas paginadas y el total para calcular páginas
+    const completadas = await obtenerTareasCompletadas(userId, TAREAS_POR_PAGINA, offset);
+    const totalCompletadas = await contarTareasCompletadas(userId);
+    const totalPaginas = Math.ceil(totalCompletadas / TAREAS_POR_PAGINA);
 
     // Encabezado y botón principal
     const blocksBase = [
@@ -123,22 +131,81 @@ async function construirVistaHome(userId) {
     blocksBase.push({ type: 'divider' });
     blocksBase.push({ type: 'context', elements: [{ type: 'mrkdwn', text: ' ' }] });
 
-    // --- SECCIÓN: TAREAS COMPLETADAS ---
-    if (completadas.length > 0) {
+    // --- SECCIÓN: TAREAS COMPLETADAS (CON TABLA Y PAGINACIÓN) ---
+    blocksBase.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `*✅ Completadas (${totalCompletadas})*` },
+    });
+
+    if (completadas.length === 0) {
+      // Mensaje cuando no hay tareas completadas
       blocksBase.push({
         type: 'section',
-        text: { type: 'mrkdwn', text: `*✅ Completadas (${completadas.length})*` },
+        text: { type: 'mrkdwn', text: '_Aún no has completado ninguna tarea._' },
       });
-
+    } else {
+      // Renderizar cada tarea completada con todos sus detalles
       completadas.forEach((tarea) => {
+        const fechaLimite = tarea.fecha ? `📅 *Límite:* ${tarea.fecha}` : '📅 *Límite:* Sin fecha';
+        const descripcion = tarea.descripcion ? `\n>_${tarea.descripcion}_` : '';
+        const fechaCreacion = tarea.creada_en 
+          ? `🕐 *Creada:* ${new Date(tarea.creada_en).toLocaleDateString('es-ES')}` 
+          : '';
+
+        // Bloque principal con título, descripción y fecha límite
         blocksBase.push({
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `~${tarea.titulo}~`,
+            text: `~*${tarea.titulo}*~${descripcion}\n${fechaLimite}`,
           },
         });
+
+        // Contexto con fecha de creación (más Details)
+        if (fechaCreacion) {
+          blocksBase.push({
+            type: 'context',
+            elements: [{ type: 'mrkdwn', text: fechaCreacion }],
+          });
+        }
       });
+
+      // Controles de paginación (solo si hay más de una página)
+      if (totalPaginas > 1) {
+        const elementosPaginacion = [];
+
+        // Botón "Anterior" (deshabilitado si estamos en la primera página)
+        if (paginaCompletadas > 1) {
+          elementosPaginacion.push({
+            type: 'button',
+            text: { type: 'plain_text', text: '◀ Anterior', emoji: true },
+            value: String(paginaCompletadas - 1),
+            action_id: 'completadas_anterior',
+          });
+        }
+
+        // Indicador de página actual
+        elementosPaginacion.push({
+          type: 'button',
+          text: { type: 'plain_text', text: `Página ${paginaCompletadas} de ${totalPaginas}`, emoji: true },
+          action_id: 'paginas_indicator',
+        });
+
+        // Botón "Siguiente" (deshabilitado si estamos en la última página)
+        if (paginaCompletadas < totalPaginas) {
+          elementosPaginacion.push({
+            type: 'button',
+            text: { type: 'plain_text', text: 'Siguiente ▶', emoji: true },
+            value: String(paginaCompletadas + 1),
+            action_id: 'completadas_siguiente',
+          });
+        }
+
+        blocksBase.push({
+          type: 'actions',
+          elements: elementosPaginacion,
+        });
+      }
     }
 
     return { type: 'home', blocks: blocksBase };
@@ -263,6 +330,43 @@ app.action('completar_tarea', async ({ ack, body, client }) => {
   } catch (error) {
     console.error('❌ Error al actualizar tarea:', error);
   }
+});
+
+// Acción: Botón "Anterior" en paginación de completadas
+app.action('completadas_anterior', async ({ ack, body, client }) => {
+  await ack();
+  const usuario = body.user.id;
+  const pagina = parseInt(body.actions[0].value, 10);
+
+  try {
+    await client.views.publish({
+      user_id: usuario,
+      view: await construirVistaHome(usuario, pagina),
+    });
+  } catch (error) {
+    console.error('❌ Error al cambiar página:', error);
+  }
+});
+
+// Acción: Botón "Siguiente" en paginación de completadas
+app.action('completadas_siguiente', async ({ ack, body, client }) => {
+  await ack();
+  const usuario = body.user.id;
+  const pagina = parseInt(body.actions[0].value, 10);
+
+  try {
+    await client.views.publish({
+      user_id: usuario,
+      view: await construirVistaHome(usuario, pagina),
+    });
+  } catch (error) {
+    console.error('❌ Error al cambiar página:', error);
+  }
+});
+
+// Acción: Botón indicador de página (solo visual, no hace nada)
+app.action('paginas_indicator', async ({ ack }) => {
+  await ack();
 });
 
 

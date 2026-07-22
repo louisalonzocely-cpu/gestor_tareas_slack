@@ -26,4 +26,22 @@ async function actualizarCompletada(tareaId, completada) {
   await pool.query('UPDATE tareas SET completada = $1 WHERE id = $2', [completada, tareaId]);
 }
 
-module.exports = { obtenerTareas, crearTarea, actualizarCompletada };
+// Obtiene tareas completadas con paginación (LIMIT/OFFSET)
+async function obtenerTareasCompletadas(usuarioId, limite, offset) {
+  const { rows } = await pool.query(
+    'SELECT * FROM tareas WHERE usuario_id = $1 AND completada = true ORDER BY creada_en DESC LIMIT $2 OFFSET $3',
+    [usuarioId, limite, offset]
+  );
+  return rows;
+}
+
+// Cuenta el total de tareas completadas para calcular páginas
+async function contarTareasCompletadas(usuarioId) {
+  const { rows } = await pool.query(
+    'SELECT COUNT(*) as total FROM tareas WHERE usuario_id = $1 AND completada = true',
+    [usuarioId]
+  );
+  return parseInt(rows[0].total, 10);
+}
+
+module.exports = { obtenerTareas, crearTarea, actualizarCompletada, obtenerTareasCompletadas, contarTareasCompletadas };
