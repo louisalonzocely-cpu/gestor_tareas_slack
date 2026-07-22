@@ -53,7 +53,7 @@ const app = new App({
  */
 async function construirVistaHome(userId, paginaCompletadas = 1) {
   // Constantes para paginación
-  const TAREAS_POR_PAGINA = 5;
+  const TAREAS_POR_PAGINA = 3;
   const offset = (paginaCompletadas - 1) * TAREAS_POR_PAGINA;
 
   try {
