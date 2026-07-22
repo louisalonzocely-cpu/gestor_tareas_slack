@@ -83,13 +83,22 @@ async function construirVistaHome(userId) {
         ],
       },
       { type: 'divider' },
+      
+      // 🔹 BLOQUE DE SEPARACIÓN VISUAL: Fuerza a Slack a empujar "Pendientes" hacia abajo
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: ' ', // Espaciado con formato transparente de Slack
+        },
+      },
     ];
 
     // --- SECCIÓN: TAREAS PENDIENTES ---
-    // Usamos el tipo 'header' para forzar el margen y espaciado nativo de Slack
+    // Agregamos un doble salto de línea antes del título
     blocksBase.push({
-      type: 'header',
-      text: { type: 'plain_text', text: `📌 Pendientes (${pendientes.length})`, emoji: true },
+      type: 'section',
+      text: { type: 'mrkdwn', text: `\n\n*📌 Pendientes (${pendientes.length})*` },
     });
 
     if (pendientes.length === 0) {
@@ -124,8 +133,8 @@ async function construirVistaHome(userId) {
     // --- SECCIÓN: TAREAS COMPLETADAS ---
     if (completadas.length > 0) {
       blocksBase.push({
-        type: 'header',
-        text: { type: 'plain_text', text: `✅ Completadas (${completadas.length})`, emoji: true },
+        type: 'section',
+        text: { type: 'mrkdwn', text: `\n\n*✅ Completadas (${completadas.length})*` },
       });
 
       completadas.forEach((tarea) => {
