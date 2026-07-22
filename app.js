@@ -88,7 +88,7 @@ async function construirVistaHome(userId) {
         elements: [
           {
             type: 'mrkdwn',
-            text: ' ',
+            text: '\u00A0',
           },
         ],
       },
