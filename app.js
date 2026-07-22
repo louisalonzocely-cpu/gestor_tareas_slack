@@ -2,30 +2,25 @@ if (process.env.NODE_ENV !== 'production') {
   require('dotenv').config();
 }
 
-const express = require('express');
 const { App, ExpressReceiver } = require('@slack/bolt');
 const { obtenerTareas, crearTarea, actualizarCompletada } = require('./db');
 
-// 1. Instanciar ExpressReceiver
+// 1. Instanciar ExpressReceiver con ruta /health integrada
 const receiver = new ExpressReceiver({
   signingSecret: process.env.SLACK_SIGNING_SECRET,
-  // Desactivar temporalmente la verificación estricta si la firma de los headers del proxy falla
-  signatureVerification: true, 
+  customRoutes: [
+    {
+      path: '/health',
+      method: ['GET'],
+      handler: (req, res) => {
+        res.writeHead(200);
+        res.end('ok');
+      },
+    },
+  ],
 });
 
-// Middleware para capturar y responder el 'url_verification' de Slack inmediatamente
-receiver.app.use(express.json());
-receiver.app.use((req, res, next) => {
-  if (req.body && req.body.type === 'url_verification') {
-    return res.status(200).send({ challenge: req.body.challenge });
-  }
-  next();
-});
-
-// Endpoint de Health Check para Railway
-receiver.router.get('/health', (req, res) => res.status(200).send('ok'));
-
-// 2. Inicializar App de Bolt
+// 2. Inicializar la app de Bolt
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
   receiver,
