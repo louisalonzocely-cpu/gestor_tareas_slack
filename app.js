@@ -2,21 +2,17 @@ require('dotenv').config();
 const { App, ExpressReceiver } = require('@slack/bolt');
 const { obtenerTareas, crearTarea, actualizarCompletada } = require('./db');
 
-// 1. Instanciar ExpressReceiver de forma limpia
+// 1. Inicializar ExpressReceiver
 const receiver = new ExpressReceiver({
   signingSecret: process.env.SLACK_SIGNING_SECRET,
-  customRoutes: [
-    {
-      path: '/health',
-      method: ['GET'],
-      handler: (req, res) => {
-        res.status(200).send('ok');
-      },
-    },
-  ],
 });
 
-// 2. Inicializar la app de Bolt
+// 2. Definir /health para Railway directamente sobre el router de Express
+receiver.router.get('/health', (req, res) => {
+  res.status(200).send('ok');
+});
+
+// 3. Inicializar App de Bolt con receiver
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
   receiver,
@@ -93,13 +89,13 @@ async function construirVistaHome(userId) {
 
     return { type: 'home', blocks: blocksBase };
   } catch (error) {
-    console.error('❌ Error construyendo la vista Home:', error);
+    console.error('❌ Error cargando tareas de DB:', error);
     return {
       type: 'home',
       blocks: [
         {
           type: 'section',
-          text: { type: 'mrkdwn', text: '⚠️ Ocurrió un error al cargar tus tareas.' },
+          text: { type: 'mrkdwn', text: '⚠️ Error al cargar tus tareas.' },
         },
       ],
     };
