@@ -2,10 +2,9 @@ require('dotenv').config();
 const { App, ExpressReceiver } = require('@slack/bolt');
 const { obtenerTareas, crearTarea, actualizarCompletada } = require('./db');
 
-// 1. Configurar ExpressReceiver registrando /health como customRoute
+// 1. Instanciar ExpressReceiver de forma limpia
 const receiver = new ExpressReceiver({
   signingSecret: process.env.SLACK_SIGNING_SECRET,
-  endpoints: '/slack/events', // Asegura explícitamente la ruta de eventos
   customRoutes: [
     {
       path: '/health',
@@ -17,86 +16,94 @@ const receiver = new ExpressReceiver({
   ],
 });
 
-// Middleware de Logs para verificar en Railway que las peticiones entran
-receiver.router.use((req, res, next) => {
-  console.log('📥 Petición recibida:', req.method, req.path);
-  next();
-});
-
+// 2. Inicializar la app de Bolt
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
   receiver,
 });
 
 async function construirVistaHome(userId) {
-  const tareas = await obtenerTareas(userId);
+  try {
+    const tareas = await obtenerTareas(userId);
 
-  const blocksBase = [
-    {
-      type: 'header',
-      text: { type: 'plain_text', text: '🗒️ Gestor de Tareas Diarias', emoji: true },
-    },
-    { type: 'divider' },
-    {
-      type: 'section',
-      text: { type: 'plain_text', text: 'Con esta App puedes gestionar tus tareas fácilmente.', emoji: true },
-    },
-    {
-      type: 'actions',
-      elements: [
-        {
-          type: 'button',
-          text: { type: 'plain_text', text: '📝 Crear una tarea', emoji: true },
-          action_id: 'abrir_modal_tarea',
-        },
-      ],
-    },
-    { type: 'divider' },
-  ];
+    const blocksBase = [
+      {
+        type: 'header',
+        text: { type: 'plain_text', text: '🗒️ Gestor de Tareas Diarias', emoji: true },
+      },
+      { type: 'divider' },
+      {
+        type: 'section',
+        text: { type: 'plain_text', text: 'Con esta App puedes gestionar tus tareas fácilmente.', emoji: true },
+      },
+      {
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: '📝 Crear una tarea', emoji: true },
+            action_id: 'abrir_modal_tarea',
+          },
+        ],
+      },
+      { type: 'divider' },
+    ];
 
-  if (tareas.length === 0) {
-    blocksBase.push({
-      type: 'section',
-      text: { type: 'mrkdwn', text: '_No tienes tareas registradas todavía._' },
-    });
-  } else {
-    tareas.forEach((tarea) => {
-      const tituloTexto = tarea.completada ? `~${tarea.titulo}~` : `*${tarea.titulo}*`;
-      const detalle = [
-        tarea.descripcion || null,
-        tarea.fecha ? `📅 ${tarea.fecha}` : null,
-      ].filter(Boolean).join('\n');
-
+    if (!tareas || tareas.length === 0) {
       blocksBase.push({
         type: 'section',
-        block_id: `tarea_${tarea.id}`,
-        text: {
-          type: 'mrkdwn',
-          text: `${tituloTexto}${detalle ? `\n${detalle}` : ''}`,
-        },
-        accessory: {
-          type: 'checkboxes',
-          action_id: 'toggle_tarea',
-          options: [
-            {
-              text: { type: 'plain_text', text: 'Completada', emoji: true },
-              value: String(tarea.id),
-            },
-          ],
-          ...(tarea.completada && {
-            initial_options: [
+        text: { type: 'mrkdwn', text: '_No tienes tareas registradas todavía._' },
+      });
+    } else {
+      tareas.forEach((tarea) => {
+        const tituloTexto = tarea.completada ? `~${tarea.titulo}~` : `*${tarea.titulo}*`;
+        const detalle = [
+          tarea.descripcion || null,
+          tarea.fecha ? `📅 ${tarea.fecha}` : null,
+        ].filter(Boolean).join('\n');
+
+        blocksBase.push({
+          type: 'section',
+          block_id: `tarea_${tarea.id}`,
+          text: {
+            type: 'mrkdwn',
+            text: `${tituloTexto}${detalle ? `\n${detalle}` : ''}`,
+          },
+          accessory: {
+            type: 'checkboxes',
+            action_id: 'toggle_tarea',
+            options: [
               {
                 text: { type: 'plain_text', text: 'Completada', emoji: true },
                 value: String(tarea.id),
               },
             ],
-          }),
-        },
+            ...(tarea.completada && {
+              initial_options: [
+                {
+                  text: { type: 'plain_text', text: 'Completada', emoji: true },
+                  value: String(tarea.id),
+                },
+              ],
+            }),
+          },
+        });
       });
-    });
-  }
+    }
 
-  return { type: 'home', blocks: blocksBase };
+    return { type: 'home', blocks: blocksBase };
+  } catch (error) {
+    console.error('❌ Error construyendo la vista Home:', error);
+    return {
+      type: 'home',
+      blocks: [
+        {
+          type: 'section',
+          text: { type: 'mrkdwn', text: '⚠️ Ocurrió un error al cargar tus tareas.' },
+        },
+      ],
+    };
+  }
 }
 
 app.event('app_home_opened', async ({ event, client }) => {
@@ -203,4 +210,3 @@ app.action('toggle_tarea', async ({ ack, body, client }) => {
   await app.start(port);
   console.log(`⚡️ App corriendo en el puerto ${port}`);
 })();
-
