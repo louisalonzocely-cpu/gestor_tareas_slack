@@ -15,9 +15,9 @@ async function obtenerTareas(usuarioId) {
 
 async function crearTarea({ usuarioId, titulo, descripcion, fecha }) {
   const { rows } = await pool.query(
-    `INSERT INTO tareas (usuario_id, titulo, descripcion, fecha)
+    `INSERT INTO tareas (usuario_id, titulo, descripcion, fecha, hora)
      VALUES ($1, $2, $3, $4) RETURNING *`,
-    [usuarioId, titulo, descripcion, fecha]
+    [usuarioId, titulo, descripcion, fecha, hora]
   );
   return rows[0];
 }
