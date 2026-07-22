@@ -174,26 +174,23 @@ async function construirVistaHome(userId, paginaCompletadas = 1) {
         text: { type: 'mrkdwn', text: '_Aún no has completado ninguna tarea._' },
       });
     } else {
-      // Lista compacta: una línea por tarea
+      // Lista compacta: una línea por tarea usando context blocks
       completadas.forEach((tarea) => {
         let fechaLimite = '';
         if (tarea.fecha) {
           const fecha = new Date(tarea.fecha);
-          fechaLimite = ` - ${fecha.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}`;
+          fechaLimite = ` | ${fecha.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}`;
           if (fecha.getHours() !== 0 || fecha.getMinutes() !== 0) {
             fechaLimite += ` ${fecha.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
           }
         }
 
         blocksBase.push({
-          type: 'section',
-          text: { type: 'mrkdwn', text: `~*${tarea.titulo}*~${fechaLimite}` },
-          accessory: {
-            type: 'button',
-            text: { type: 'plain_text', text: '✏️', emoji: true },
-            value: String(tarea.id),
-            action_id: 'editar_tarea',
-          },
+          type: 'context',
+          elements: [{ 
+            type: 'mrkdwn', 
+            text: `~• ${tarea.titulo}${fechaLimite}~` 
+          }],
         });
       });
 
