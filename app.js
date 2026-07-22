@@ -2,10 +2,22 @@ require('dotenv').config();
 const { App, ExpressReceiver } = require('@slack/bolt');
 const { obtenerTareas, crearTarea, actualizarCompletada } = require('./db');
 
+// 1. Configurar ExpressReceiver registrando /health como customRoute
 const receiver = new ExpressReceiver({
   signingSecret: process.env.SLACK_SIGNING_SECRET,
+  endpoints: '/slack/events', // Asegura explícitamente la ruta de eventos
+  customRoutes: [
+    {
+      path: '/health',
+      method: ['GET'],
+      handler: (req, res) => {
+        res.status(200).send('ok');
+      },
+    },
+  ],
 });
 
+// Middleware de Logs para verificar en Railway que las peticiones entran
 receiver.router.use((req, res, next) => {
   console.log('📥 Petición recibida:', req.method, req.path);
   next();
@@ -15,9 +27,6 @@ const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
   receiver,
 });
-
-// Health check — Railway lo usa para saber que el servicio está vivo
-receiver.router.get('/health', (req, res) => res.status(200).send('ok'));
 
 async function construirVistaHome(userId) {
   const tareas = await obtenerTareas(userId);
@@ -194,3 +203,4 @@ app.action('toggle_tarea', async ({ ack, body, client }) => {
   await app.start(port);
   console.log(`⚡️ App corriendo en el puerto ${port}`);
 })();
+
