@@ -97,13 +97,13 @@ async function construirVistaHome(userId) {
 
     return { type: 'home', blocks: blocksBase };
   } catch (error) {
-    console.error('❌ Error al obtener tareas:', error);
+    console.error('Error al obtener tareas:', error);
     return {
       type: 'home',
       blocks: [
         {
           type: 'section',
-          text: { type: 'mrkdwn', text: '⚠️ Ocurrió un error al cargar tus tareas.' },
+          text: { type: 'mrkdwn', text: 'Ocurrió un error al cargar tus tareas.' },
         },
       ],
     };
@@ -117,7 +117,7 @@ app.event('app_home_opened', async ({ event, client }) => {
       view: await construirVistaHome(event.user),
     });
   } catch (error) {
-    console.error('❌ Error en app_home_opened:', error);
+    console.error('Error en app_home_opened:', error);
   }
 });
 
@@ -164,7 +164,7 @@ app.action('abrir_modal_tarea', async ({ ack, body, client }) => {
       },
     });
   } catch (error) {
-    console.error('❌ Error al abrir modal:', error);
+    console.error('Error al abrir modal:', error);
   }
 });
 
@@ -186,7 +186,7 @@ app.view('submit_tarea', async ({ ack, body, view, client }) => {
       view: await construirVistaHome(usuario),
     });
   } catch (error) {
-    console.error('❌ Error al guardar tarea:', error);
+    console.error('Error al guardar tarea:', error);
   }
 });
 
@@ -205,12 +205,12 @@ app.action('toggle_tarea', async ({ ack, body, client }) => {
       view: await construirVistaHome(usuario),
     });
   } catch (error) {
-    console.error('❌ Error al actualizar tarea:', error);
+    console.error('Error al actualizar tarea:', error);
   }
 });
 
 (async () => {
   const port = process.env.PORT || 3000;
   await app.start(port);
-  console.log(`⚡️ App corriendo en el puerto ${port}`);
+  console.log(`App corriendo en el puerto ${port}`);
 })();
