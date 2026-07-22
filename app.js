@@ -88,7 +88,7 @@ async function construirVistaHome(userId) {
     // --- SECCIÓN: TAREAS PENDIENTES ---
     blocksBase.push({
       type: 'section',
-      text: { type: 'mrkdwn', text: `*📌 Pendientes (${pendientes.length})*` },
+      text: { type: 'mrkdwn', text: `\n\n\n*📌 Pendientes (${pendientes.length})*` },
     });
 
     if (pendientes.length === 0) {
