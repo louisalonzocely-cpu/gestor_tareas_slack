@@ -108,7 +108,16 @@ async function construirVistaHome(userId, paginaCompletadas = 1) {
       });
     } else {
       pendientes.forEach((tarea) => {
-        const fechaTexto = tarea.fecha ? `📅 *Límite:* ${tarea.fecha}` : '📅 *Límite:* Sin fecha';
+        // Formatear fecha límite con hora si está disponible
+        let fechaTexto = '📅 *Límite:* Sin fecha';
+        if (tarea.fecha) {
+          const fecha = new Date(tarea.fecha);
+          fechaTexto = `📅 *Límite:* ${fecha.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
+          if (fecha.getHours() !== 0 || fecha.getMinutes() !== 0) {
+            fechaTexto += ` a las ${fecha.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
+          }
+        }
+        
         const descTexto = tarea.descripcion ? `\n>_${tarea.descripcion}_` : '';
 
         blocksBase.push({
@@ -144,28 +153,51 @@ async function construirVistaHome(userId, paginaCompletadas = 1) {
         text: { type: 'mrkdwn', text: '_Aún no has completado ninguna tarea._' },
       });
     } else {
-      // Renderizar cada tarea completada con todos sus detalles
-      completadas.forEach((tarea) => {
-        const fechaLimite = tarea.fecha ? `📅 *Límite:* ${tarea.fecha}` : '📅 *Límite:* Sin fecha';
-        const descripcion = tarea.descripcion ? `\n>_${tarea.descripcion}_` : '';
-        const fechaCreacion = tarea.creada_en 
-          ? `🕐 *Creada:* ${new Date(tarea.creada_en).toLocaleDateString('es-ES')}` 
-          : '';
+      // Encabezado de tabla
+      blocksBase.push({
+        type: 'context',
+        elements: [{ type: 'mrkdwn', text: '```📋 *TÍTULO*                  📅 *LÍMITE*        🕐 *CREADA*```' }],
+      });
 
-        // Bloque principal con título, descripción y fecha límite
+      // Renderizar cada tarea completada como fila de tabla
+      completadas.forEach((tarea) => {
+        const titulo = tarea.titulo.length > 20 
+          ? tarea.titulo.substring(0, 18) + '..' 
+          : tarea.titulo;
+        
+        // Formatear fecha límite (solo fecha o fecha + hora)
+        let fechaLimite = 'Sin fecha';
+        if (tarea.fecha) {
+          const fecha = new Date(tarea.fecha);
+          fechaLimite = fecha.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+          // Si tiene hora (no es medianoche exacta), mostrarla
+          if (fecha.getHours() !== 0 || fecha.getMinutes() !== 0) {
+            fechaLimite += ` ${fecha.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
+          }
+        }
+
+        // Formatear fecha de creación
+        const fechaCreacion = tarea.creada_en 
+          ? new Date(tarea.creada_en).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })
+          : '--/--';
+
+        // Fila de tabla con formato alineado
+        const tituloPad = titulo.padEnd(22);
+        const fechaPad = fechaLimite.padEnd(16);
+
         blocksBase.push({
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `~*${tarea.titulo}*~${descripcion}\n${fechaLimite}`,
-          },
+          type: 'context',
+          elements: [{ 
+            type: 'mrkdwn', 
+            text: `~*~${tituloPad} ${fechaPad} ${fechaCreacion}~*~`
+          }],
         });
 
-        // Contexto con fecha de creación (más Details)
-        if (fechaCreacion) {
+        // Mostrar descripción si existe
+        if (tarea.descripcion) {
           blocksBase.push({
             type: 'context',
-            elements: [{ type: 'mrkdwn', text: fechaCreacion }],
+            elements: [{ type: 'mrkdwn', text: `    >_${tarea.descripcion}_` }],
           });
         }
       });
@@ -281,6 +313,17 @@ app.action('abrir_modal_tarea', async ({ ack, body, client }) => {
               placeholder: { type: 'plain_text', text: 'Selecciona una fecha' },
             },
           },
+          {
+            type: 'input',
+            block_id: 'hora_block',
+            label: { type: 'plain_text', text: 'Hora límite' },
+            optional: true,
+            element: {
+              type: 'timepicker',
+              action_id: 'hora_input',
+              placeholder: { type: 'plain_text', text: 'Selecciona una hora' },
+            },
+          },
         ],
       },
     });
@@ -295,12 +338,23 @@ app.view('submit_tarea', async ({ ack, body, view, client }) => {
   const valores = view.state.values;
   const usuario = body.user.id;
 
+  // Combinar fecha y hora en un solo timestamp
+  const fechaSeleccionada = valores.fecha_block.fecha_input.selected_date;
+  const horaSeleccionada = valores.hora_block.hora_input.selected_time;
+  
+  let fechaCompleta = null;
+  if (fechaSeleccionada) {
+    // Si hay hora seleccionada, combinarlas; si no, usar solo la fecha con hora 00:00
+    const hora = horaSeleccionada || '00:00';
+    fechaCompleta = `${fechaSeleccionada}T${hora}:00`;
+  }
+
   try {
     await crearTarea({
       usuarioId: usuario,
       titulo: valores.titulo_block.titulo_input.value,
       descripcion: valores.descripcion_block.descripcion_input.value || null,
-      fecha: valores.fecha_block.fecha_input.selected_date || null,
+      fecha: fechaCompleta,
     });
 
     await client.views.publish({
