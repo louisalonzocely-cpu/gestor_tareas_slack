@@ -83,6 +83,15 @@ async function construirVistaHome(userId) {
         ],
       },
       { type: 'divider' },
+      {
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: ' ',
+          },
+        ],
+      },
     ];
 
     // --- SECCIÓN: TAREAS PENDIENTES ---
