@@ -331,8 +331,8 @@ app.view('submit_tarea', async ({ ack, body, view, client }) => {
   const usuario = body.user.id;
 
   // Combinar fecha y hora en un solo timestamp
-  const fechaSeleccionada = valores.fecha_block.fecha_input.selected_date;
-  const horaSeleccionada = valores.hora_block.hora_input.selected_time;
+  const fechaSeleccionada = valores.fecha_block?.fecha_input?.selected_date || null;
+  const horaSeleccionada = valores.hora_block?.hora_input?.selected_time || null;
   
   let fechaCompleta = null;
   if (fechaSeleccionada) {
@@ -345,7 +345,7 @@ app.view('submit_tarea', async ({ ack, body, view, client }) => {
     await crearTarea({
       usuarioId: usuario,
       titulo: valores.titulo_block.titulo_input.value,
-      descripcion: valores.descripcion_block.descripcion_input.value || null,
+      descripcion: valores.descripcion_block?.descripcion_input?.value || null,
       fecha: fechaCompleta,
     });
 
